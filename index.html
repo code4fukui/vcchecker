@@ -1,0 +1,182 @@
+<!DOCTYPE html><html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width">
+<title>高速ワクチン接種証明書チェッカー - SMART Health Card decoder</title>
+<style>
+body {
+  font-family: sans-serif;
+  color: #333;
+  max-width: 640px;
+  margin: 0 auto;
+  position: relative;
+}
+h1 {
+  margin: 10px 0;
+  font-size: 33px;
+}
+#loadingMessage {
+  text-align: center;
+  padding: 40px;
+  background-color: #eee;
+}
+#canvas {
+  width: 100%;
+}
+#outputContainer {
+  margin-top: 20px;
+  background: #eee;
+  padding: 10px;
+  padding-bottom: 0;
+  word-break: break-all;
+}
+#outputContainer div {
+  padding-bottom: 10px;
+  word-wrap: break-word;
+}
+#noQRFound {
+  text-align: center;
+}
+.credit a {
+  color: #2D99FF;
+  font-size: 90%;
+}
+</style>
+</head>
+<body>
+<h1>高速ワクチン接種証明書チェッカー</h1>
+<div id="loadingMessage">カメラをONにしてワクチン接種証明書のQRコードをかざすと、検証とデコードを行いデータを表示します。</div>
+<canvas id="canvas"></canvas>
+<div id="outputContainer">
+  <div id="outputMessage">QRコードの検出していません</div>
+  <div><span id="outputData"></span></div>
+</div>
+
+<h4>SMART Health Card decoder</h4>
+<div class=credit>
+<a href=https://fukuno.jig.jp/3441>「高速ワクチン接種証明書チェッカーを作りました」</a>
+<a href="https://github.com/code4fukui/SMARTHealthCard-es">src on Github</a>
+<a href=https://vc.vrs.digital.go.jp/issuer/.well-known/jwks.json>デジタル庁の公開鍵</a>
+</div>
+
+<script type="module">
+import { jsQR } from "https://code4fukui.github.io/jsQR-es/jsQR.js";
+import { SMARTHealthCard } from "https://code4fukui.github.io/SMARTHealthCard/SMARTHealthCard.js";
+
+onload = async () => {
+  const video = document.createElement("video");
+  const g = canvas.getContext("2d");
+
+  const drawLine = (begin, end, color) => {
+    g.beginPath();
+    g.moveTo(begin.x, begin.y);
+    g.lineTo(end.x, end.y);
+    g.lineWidth = 4;
+    g.strokeStyle = color;
+    g.stroke();
+  };
+
+  const fillPolygon = (pnts) => {
+    g.beginPath();
+    g.fillStyle = "white";
+    g.globalAlpha = .8;
+    const p1 = pnts[0];
+    g.moveTo(p1.x, p1.y);
+    for (let i = 1; i < pnts.length; i++) {
+      g.lineTo(pnts[i].x, pnts[i].y);
+    }
+    g.fill();
+    g.globalAlpha = 1.0;
+  };
+
+  const drawStrings = (ss, x, y) => {
+    g.fillStyle = "black";
+    const fh = 15;
+    g.font = fh + "px 'sans-serif'";
+    g.textAlign = "center";
+    g.textBaseline = "top";
+    for (const s of ss.split("\n")) {
+      g.fillText(s, x, y);
+      y += fh + 5;
+    }
+  };
+
+
+  // Use facingMode: environment to attemt to get the front camera on phones
+  const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+  video.srcObject = stream;
+  video.setAttribute("playsinline", true); // required to tell iOS safari we don't want fullscreen
+  video.play();
+  //loadingMessage.innerText = "⌛ Loading video..."
+
+  // CORS対応していなかったので、ダウンロードして使用
+  const jwks = await (await fetch("./vc_vrs_digital_go_jp_issuer_well-known_jwks.json")).json();
+
+  let data2 = null;
+  let x, y;
+  let pnts = null;
+  const tick = async () => {
+    if (video.readyState === video.HAVE_ENOUGH_DATA) {
+      loadingMessage.hidden = true;
+      canvas.hidden = false;
+      outputContainer.hidden = false;
+
+      canvas.height = video.videoHeight;
+      canvas.width = video.videoWidth;
+      g.drawImage(video, 0, 0, canvas.width, canvas.height);
+      const imageData = g.getImageData(0, 0, canvas.width, canvas.height);
+      const code = jsQR(imageData.data, imageData.width, imageData.height, {
+        inversionAttempts: "dontInvert",
+      });
+      if (code) {
+        const color = "#FF3B58";
+        /*
+        drawLine(code.location.topLeftCorner, code.location.topRightCorner, color);
+        drawLine(code.location.topRightCorner, code.location.bottomRightCorner, color);
+        drawLine(code.location.bottomRightCorner, code.location.bottomLeftCorner, color);
+        drawLine(code.location.bottomLeftCorner, code.location.topLeftCorner, color);
+        */
+        pnts = [code.location.topLeftCorner, code.location.topRightCorner, code.location.bottomRightCorner, code.location.bottomLeftCorner];
+        //fillPolygon(pnts);
+
+        try {
+          const shc = code.data;
+          const dec = SMARTHealthCard.decode(shc);
+          /*
+          console.log(dec);
+          const data = JSON.stringify(dec.payload.vc.credentialSubject.fhirBundle.entry);
+          */
+          const data = SMARTHealthCard.toStringEntry(dec);
+          if (data2) {
+            fillPolygon(pnts);
+            drawStrings(data2, x, y);
+          }
+          const res = await SMARTHealthCard.verify(dec, jwks);
+          //console.log(res);
+
+          if (res) {
+            outputMessage.hidden = true;
+            outputData.parentElement.hidden = false;
+            data2 = data + "\n[デジタル庁の電子署名を検証済み]";
+            outputData.innerText = data2;
+            
+            x = (code.location.topLeftCorner.x + code.location.topRightCorner.x) / 2;
+            y = (code.location.topLeftCorner.y + code.location.topRightCorner.y) / 2 + 100;
+            drawStrings(data2, x, y);
+          }
+        } catch (e) {
+          //console.log(e);
+        }
+      } else {
+        if (data2) {
+          fillPolygon(pnts);
+          drawStrings(data2, x, y);
+        }
+      }
+    }
+    //requestAnimationFrame(tick);
+    setTimeout(tick, 1000 / 30);
+  };
+  tick();
+};
+</script>
+
+</body>
+</html>
