@@ -4,4 +4,4 @@
 
 - [高速ワクチン接種証明書チェッカー](https://code4fukui.github.io/vcchecker/)
 
-<img width="610" alt="vcchecker" src="https://user-images.githubusercontent.com/1715217/147420791-4fc126d7-f224-4830-81c7-0d01720d709d.png">
+<img width="354" alt="vcchecker-nomargin" src="https://user-images.githubusercontent.com/1715217/147420803-64ab2df0-d77c-494f-9db4-e20d10c7b79d.png">
