@@ -53,13 +53,13 @@ h1 {
 <h4>vcchecker - SMART Health Card decoder</h4>
 <div class=credit>
 <a href=https://fukuno.jig.jp/3441>「高速ワクチン接種証明書チェッカーを作りました」</a>
-<a href="https://github.com/code4fukui/SMARTHealthCard-es">src on Github</a>
+<a href="https://github.com/code4fukui/SMARTHealthCards-es">src on Github</a>
 <a href=https://vc.vrs.digital.go.jp/issuer/.well-known/jwks.json>デジタル庁の公開鍵</a>
 </div>
 
 <script type="module">
 import { jsQR } from "https://code4fukui.github.io/jsQR-es/jsQR.js";
-import { SMARTHealthCard } from "https://code4fukui.github.io/SMARTHealthCard-es/SMARTHealthCard.js";
+import { SMARTHealthCards } from "https://code4fukui.github.io/SMARTHealthCards-es/SMARTHealthCards.js";
 
 onload = async () => {
   const video = document.createElement("video");
@@ -139,17 +139,17 @@ onload = async () => {
 
         try {
           const shc = code.data;
-          const dec = SMARTHealthCard.decode(shc);
+          const dec = SMARTHealthCards.decode(shc);
           /*
           console.log(dec);
           const data = JSON.stringify(dec.payload.vc.credentialSubject.fhirBundle.entry);
           */
-          const data = SMARTHealthCard.toStringEntry(dec);
+          const data = SMARTHealthCards.toStringEntry(dec);
           if (data2) {
             fillPolygon(pnts);
             drawStrings(data2, x, y);
           }
-          const res = await SMARTHealthCard.verify(dec, jwks);
+          const res = await SMARTHealthCards.verify(dec, jwks);
           //console.log(res);
 
           if (res) {
