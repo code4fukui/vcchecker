@@ -61,6 +61,21 @@ h1 {
 import { jsQR } from "https://code4fukui.github.io/jsQR-es/jsQR.js";
 import { SMARTHealthCards } from "https://code4fukui.github.io/SMARTHealthCards-es/SMARTHealthCards.js";
 
+const getVideoStream = async (backcamera) => {
+  const video = {
+    //width: { ideal: w },
+    //height: { ideal: h },
+    facingMode: backcamera ? { ideal: "environment" } : "user",
+  };
+  const devs = await navigator.mediaDevices.enumerateDevices();
+  const dev = devs.find(d => d.kind == "videoinput" && d.label.toLowerCase().indexOf("camera") >= 0 && d.label.toLowerCase().indexOf("virtual") == -1);
+  if (dev) {
+    video.deviceId = dev.deviceId;
+  }
+  const stream = await navigator.mediaDevices.getUserMedia({ video });
+  return stream;
+};
+
 onload = async () => {
   const video = document.createElement("video");
   const g = canvas.getContext("2d");
@@ -74,9 +89,9 @@ onload = async () => {
     g.stroke();
   };
 
-  const fillPolygon = (pnts) => {
+  const fillPolygon = (pnts, color = "white") => {
     g.beginPath();
-    g.fillStyle = "white";
+    g.fillStyle = color;
     g.globalAlpha = .8;
     const p1 = pnts[0];
     g.moveTo(p1.x, p1.y);
@@ -101,7 +116,8 @@ onload = async () => {
 
 
   // Use facingMode: environment to attemt to get the front camera on phones
-  const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+  const backcamera = true;
+  const stream = await getVideoStream(backcamera);
   video.srcObject = stream;
   video.setAttribute("playsinline", true); // required to tell iOS safari we don't want fullscreen
   video.play();
@@ -111,6 +127,7 @@ onload = async () => {
   const jwks = await (await fetch("./vc_vrs_digital_go_jp_issuer_well-known_jwks.json")).json();
 
   let data2 = null;
+  let pcolor = null;
   let x, y;
   let pnts = null;
   const tick = async () => {
@@ -135,8 +152,10 @@ onload = async () => {
         drawLine(code.location.bottomLeftCorner, code.location.topLeftCorner, color);
         */
         pnts = [code.location.topLeftCorner, code.location.topRightCorner, code.location.bottomRightCorner, code.location.bottomLeftCorner];
+        x = (code.location.topLeftCorner.x + code.location.topRightCorner.x) / 2;
+        y = (code.location.topLeftCorner.y + code.location.topRightCorner.y) / 2 + 20;
         //fillPolygon(pnts);
-
+        
         try {
           const shc = code.data;
           const dec = SMARTHealthCards.decode(shc);
@@ -145,12 +164,7 @@ onload = async () => {
           const data = JSON.stringify(dec.payload.vc.credentialSubject.fhirBundle.entry);
           */
           const data = SMARTHealthCards.toStringEntry(dec);
-          if (data2) {
-            fillPolygon(pnts);
-            drawStrings(data2, x, y);
-          }
           const res = await SMARTHealthCards.verify(dec, jwks);
-          //console.log(res);
 
           if (res) {
             outputMessage.hidden = true;
@@ -158,16 +172,22 @@ onload = async () => {
             data2 = data + "\n[デジタル庁の電子署名を検証済み]";
             outputData.innerText = data2;
             
-            x = (code.location.topLeftCorner.x + code.location.topRightCorner.x) / 2;
-            y = (code.location.topLeftCorner.y + code.location.topRightCorner.y) / 2 + 100;
+            pcolor = "white";
+            fillPolygon(pnts);
             drawStrings(data2, x, y);
+          } else {
+            fillPolygon(pnts, pcolor = "red");
+            drawStrings(data2 = "不正なQRコードです", x, y);
           }
         } catch (e) {
-          //console.log(e);
+          fillPolygon(pnts, pcolor = "red");
+          drawStrings(data2 = "不正なQRコードです\n" + e.toString(), x, y);
+          console.log(e);
+          outputData.innerText = "";
         }
       } else {
         if (data2) {
-          fillPolygon(pnts);
+          fillPolygon(pnts, pcolor);
           drawStrings(data2, x, y);
         }
       }
